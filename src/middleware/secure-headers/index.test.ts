@@ -1,7 +1,19 @@
 /* eslint-disable quotes */
+import type {
+  Callback,
+  CloudFrontRequest,
+  CloudFrontResponse,
+} from '../../adapter/lambda-edge/handler'
+import { handle } from '../../adapter/lambda-edge/handler'
 import { Hono } from '../../hono'
 import { poweredBy } from '../powered-by'
-import { secureHeaders } from '.'
+import { secureHeaders, secureHeadersForLambdaEdge } from '.'
+
+type Bindings = {
+  callback: Callback
+  request: CloudFrontRequest
+  response: CloudFrontResponse
+}
 
 describe('Secure Headers Middleware', () => {
   it('default middleware', async () => {
@@ -321,5 +333,70 @@ describe('Secure Headers Middleware', () => {
       'e1="https://a.example.com/reports", e2="https://b.example.com/reports"'
     )
     expect(res4.headers.get('Content-Security-Policy')).toEqual("default-src 'self'; report-to e1")
+  })
+})
+
+describe('Secure Headers Middleware with Lambda@Edge', () => {
+
+  const app = new Hono<{ Bindings: Bindings }>()
+  app.use('*', secureHeadersForLambdaEdge())
+  app.get('/callback/request', async (c, next) => {
+    await next()
+    c.env.callback(null, c.env.request)
+  })
+  app.get('/callback/response', async (c, next) => {
+    await next()
+    c.env.callback(null, c.env.response)
+  })
+  const handler = handle(app)
+  interface CloudFrontHeaders {
+    [name: string]: [
+      {
+        key: string
+        value: string
+      }
+    ]
+  }
+
+
+  it('default middleware with Lambda@Edge Request', async () => {
+    const event = {
+      Records: [
+        {
+          cf: {
+            config: {
+              distributionDomainName: 'example.com',
+              distributionId: 'EXAMPLE123',
+              eventType: 'viewer-request',
+              requestId: 'exampleRequestId',
+            },
+            request: {
+              clientIp: '123.123.123.123',
+              headers: {},
+              method: 'GET',
+              querystring: '',
+              uri: '/callback/request',
+            },
+          },
+        },
+      ],
+    }
+
+    let called = false
+    let headers: CloudFrontHeaders = {}
+
+    await handler(event, {}, (_err, result) => {
+      if (result && result.headers) {
+        headers = result.headers as CloudFrontHeaders
+      }
+      called = true
+    })
+    expect(called).toBe(true)
+    expect(headers['x-frame-options']).toEqual([
+      {
+        key: 'X-Frame-Options',
+        value: 'SAMEORIGIN',
+      },
+    ])
   })
 })
