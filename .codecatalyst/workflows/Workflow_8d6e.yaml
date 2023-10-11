@@ -20,3 +20,8 @@ Actions:
           Steps:
             - name: Checkout 
               uses: github/checkout@v4
+            - uses: actions/setup-node@v3
+              with:
+               node-version: 18.x
+            - run: yarn install --frozen-lockfile
+            - run: npm run format
