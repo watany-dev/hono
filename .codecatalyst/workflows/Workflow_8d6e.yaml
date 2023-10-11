@@ -1,0 +1,22 @@
+Name: Workflow_8d6e
+SchemaVersion: "1.0"
+RunMode: QUEUED
+# Optional - Set automatic triggers.
+Triggers:
+  - Type: Push
+    Branches:
+      - main
+      - next
+  - Type: PULLREQUEST
+    Events:
+      - OPEN
+      - REVISION
+
+# Required - Define action configurations.
+Actions:
+    main:
+        Identifier: aws/github-actions-runner@v1
+        Configuration:
+          Steps:
+            - name: Checkout 
+              uses: github/checkout@v4
