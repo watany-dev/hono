@@ -4,48 +4,18 @@ import type { Hono } from '../../hono'
 import type { Env, Schema } from '../../types'
 
 import { encodeBase64 } from '../../utils/encode'
-import type { ApiGatewayRequestContext, LambdaFunctionUrlRequestContext } from './custom-context'
-import type { LambdaContext } from './types'
+import type {
+  APIGatewayProxyEvent,
+  APIGatewayProxyEventV2,
+  LambdaFunctionUrlEvent,
+  LambdaContext,
+  ApiGatewayRequestContext,
+  LambdaFunctionUrlRequestContext,
+} from './types'
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 globalThis.crypto ??= crypto
-
-// When calling Lambda directly through function urls
-interface APIGatewayProxyEventV2 {
-  httpMethod: string
-  headers: Record<string, string | undefined>
-  cookies?: string[]
-  rawPath: string
-  rawQueryString: string
-  body: string | null
-  isBase64Encoded: boolean
-  requestContext: ApiGatewayRequestContext
-}
-
-// When calling Lambda through an API Gateway or an ELB
-interface APIGatewayProxyEvent {
-  httpMethod: string
-  headers: Record<string, string | undefined>
-  multiValueHeaders?: {
-    [headerKey: string]: string[]
-  }
-  path: string
-  body: string | null
-  isBase64Encoded: boolean
-  queryStringParameters?: Record<string, string | undefined>
-  requestContext: ApiGatewayRequestContext
-}
-
-// When calling Lambda through an Lambda Function URLs
-interface LambdaFunctionUrlEvent {
-  headers: Record<string, string | undefined>
-  rawPath: string
-  rawQueryString: string
-  body: string | null
-  isBase64Encoded: boolean
-  requestContext: LambdaFunctionUrlRequestContext
-}
 
 interface APIGatewayProxyResult {
   statusCode: number
