@@ -7,10 +7,9 @@ import { encodeBase64 } from '../../utils/encode'
 import type {
   APIGatewayProxyEvent,
   APIGatewayProxyEventV2,
-  LambdaFunctionUrlEvent,
   LambdaContext,
   ApiGatewayRequestContext,
-  LambdaFunctionUrlRequestContext,
+  ApiGatewayRequestContextV2,
 } from './types'
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -29,8 +28,8 @@ interface APIGatewayProxyResult {
 }
 
 const getRequestContext = (
-  event: APIGatewayProxyEvent | APIGatewayProxyEventV2 | LambdaFunctionUrlEvent
-): ApiGatewayRequestContext | LambdaFunctionUrlRequestContext => {
+  event: APIGatewayProxyEvent | APIGatewayProxyEventV2
+): ApiGatewayRequestContext | ApiGatewayRequestContextV2 => {
   return event.requestContext
 }
 
@@ -41,13 +40,14 @@ export const handle = <E extends Env = Env, S extends Schema = {}, BasePath exte
   app: Hono<E, S, BasePath>
 ) => {
   return async (
-    event: APIGatewayProxyEvent | APIGatewayProxyEventV2 | LambdaFunctionUrlEvent,
+    event: APIGatewayProxyEvent | APIGatewayProxyEventV2,
     lambdaContext?: LambdaContext
   ): Promise<APIGatewayProxyResult> => {
     const req = createRequest(event)
     const requestContext = getRequestContext(event)
 
     const res = await app.fetch(req, {
+      event,
       requestContext,
       lambdaContext,
     })
@@ -57,7 +57,7 @@ export const handle = <E extends Env = Env, S extends Schema = {}, BasePath exte
 }
 
 const createResult = async (
-  event: APIGatewayProxyEvent | APIGatewayProxyEventV2 | LambdaFunctionUrlEvent,
+  event: APIGatewayProxyEvent | APIGatewayProxyEventV2,
   res: Response
 ): Promise<APIGatewayProxyResult> => {
   const contentType = res.headers.get('content-type')
@@ -90,9 +90,7 @@ const createResult = async (
   return result
 }
 
-const createRequest = (
-  event: APIGatewayProxyEvent | APIGatewayProxyEventV2 | LambdaFunctionUrlEvent
-) => {
+const createRequest = (event: APIGatewayProxyEvent | APIGatewayProxyEventV2) => {
   const queryString = extractQueryString(event)
   const urlPath = `https://${event.requestContext.domainName}${
     isProxyEvent(event) ? event.path : event.rawPath
@@ -118,9 +116,7 @@ const createRequest = (
   return new Request(url, requestInit)
 }
 
-const extractQueryString = (
-  event: APIGatewayProxyEvent | APIGatewayProxyEventV2 | LambdaFunctionUrlEvent
-) => {
+const extractQueryString = (event: APIGatewayProxyEvent | APIGatewayProxyEventV2) => {
   if (isProxyEvent(event)) {
     return Object.entries(event.queryStringParameters || {})
       .filter(([, value]) => value)
@@ -128,20 +124,17 @@ const extractQueryString = (
       .join('&')
   }
 
-  return isProxyEventV2(event) ? event.rawQueryString : event.rawQueryString
+  return event.rawQueryString
 }
 
-const getCookies = (
-  event: APIGatewayProxyEvent | APIGatewayProxyEventV2 | LambdaFunctionUrlEvent,
-  headers: Headers
-) => {
+const getCookies = (event: APIGatewayProxyEvent | APIGatewayProxyEventV2, headers: Headers) => {
   if (isProxyEventV2(event) && Array.isArray(event.cookies)) {
     headers.set('Cookie', event.cookies.join('; '))
   }
 }
 
 const setCookies = (
-  event: APIGatewayProxyEvent | APIGatewayProxyEventV2 | LambdaFunctionUrlEvent,
+  event: APIGatewayProxyEvent | APIGatewayProxyEventV2,
   res: Response,
   result: APIGatewayProxyResult
 ) => {
@@ -161,13 +154,13 @@ const setCookies = (
 }
 
 const isProxyEvent = (
-  event: APIGatewayProxyEvent | APIGatewayProxyEventV2 | LambdaFunctionUrlEvent
+  event: APIGatewayProxyEvent | APIGatewayProxyEventV2
 ): event is APIGatewayProxyEvent => {
   return Object.prototype.hasOwnProperty.call(event, 'path')
 }
 
 const isProxyEventV2 = (
-  event: APIGatewayProxyEvent | APIGatewayProxyEventV2 | LambdaFunctionUrlEvent
+  event: APIGatewayProxyEvent | APIGatewayProxyEventV2
 ): event is APIGatewayProxyEventV2 => {
   return Object.prototype.hasOwnProperty.call(event, 'rawPath')
 }
