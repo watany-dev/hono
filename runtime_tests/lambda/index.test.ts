@@ -1,16 +1,19 @@
-import type {
-  ApiGatewayRequestContext,
-  LambdaFunctionUrlRequestContext,
-} from '../../src/adapter/aws-lambda/custom-context'
 import { handle } from '../../src/adapter/aws-lambda/handler'
-import type { LambdaContext } from '../../src/adapter/aws-lambda/types'
+import type {
+  APIGatewayProxyEvent,
+  APIGatewayProxyEventV2,
+  LambdaContext,
+  ApiGatewayRequestContext,
+  ApiGatewayRequestContextV2,
+} from '../../src/adapter/aws-lambda/types'
 import { getCookie, setCookie } from '../../src/helper/cookie'
 import { Hono } from '../../src/hono'
 import { basicAuth } from '../../src/middleware/basic-auth'
 
 type Bindings = {
+  event: APIGatewayProxyEvent | APIGatewayProxyEventV2
   lambdaContext: LambdaContext
-  requestContext: ApiGatewayRequestContext | LambdaFunctionUrlRequestContext
+  requestContext: ApiGatewayRequestContext | ApiGatewayRequestContextV2
 }
 
 describe('AWS Lambda Adapter for Hono', () => {
@@ -41,18 +44,33 @@ describe('AWS Lambda Adapter for Hono', () => {
   app.use('/auth/*', basicAuth({ username, password }))
   app.get('/auth/abc', (c) => c.text('Good Night Lambda!'))
 
+  app.get('/lambda-event', (c) => {
+    const event = c.env.event
+    return c.json(event)
+  })
+
   app.get('/lambda-context', (c) => {
     const fnctx = c.env.lambdaContext
     return c.json(fnctx)
   })
 
+  app.get('/custom-context/v1/apigw', (c) => {
+    const lambdaContext = c.env.requestContext
+    return c.json(lambdaContext)
+  })
+
   app.get('/custom-context/apigw', (c) => {
+    const lambdaContext = c.env.event.requestContext
+    return c.json(lambdaContext)
+  })
+
+  app.get('/custom-context/v1/lambda', (c) => {
     const lambdaContext = c.env.requestContext
     return c.json(lambdaContext)
   })
 
   app.get('/custom-context/lambda', (c) => {
-    const lambdaContext = c.env.requestContext
+    const lambdaContext = c.env.event.requestContext
     return c.json(lambdaContext)
   })
 
@@ -112,7 +130,7 @@ describe('AWS Lambda Adapter for Hono', () => {
     customProperty: 'customValue',
   }
 
-  const testLambdaFunctionUrlRequestContext = {
+  const testApiGatewayRequestContextV2 = {
     accountId: '123456789012',
     apiId: 'urlid',
     authentication: null,
@@ -146,6 +164,8 @@ describe('AWS Lambda Adapter for Hono', () => {
 
   it('Should handle a GET request and return a 200 response', async () => {
     const event = {
+      version: '1.0',
+      resource: '/',
       httpMethod: 'GET',
       headers: { 'content-type': 'text/plain' },
       path: '/',
@@ -163,6 +183,8 @@ describe('AWS Lambda Adapter for Hono', () => {
 
   it('Should handle a GET request and return a 200 response with binary', async () => {
     const event = {
+      version: '1.0',
+      resource: '/binary',
       httpMethod: 'GET',
       headers: {},
       path: '/binary',
@@ -180,15 +202,17 @@ describe('AWS Lambda Adapter for Hono', () => {
 
   it('Should handle a GET request and return a 200 response (LambdaFunctionUrlEvent)', async () => {
     const event = {
+      version: '2.0',
+      routeKey: '$default',
       headers: { 'content-type': 'text/plain' },
       rawPath: '/',
       rawQueryString: '',
       body: null,
       isBase64Encoded: false,
-      requestContext: testLambdaFunctionUrlRequestContext,
+      requestContext: testApiGatewayRequestContextV2,
     }
 
-    testLambdaFunctionUrlRequestContext.http.method = 'GET'
+    testApiGatewayRequestContextV2.http.method = 'GET'
 
     const response = await handler(event)
     expect(response.statusCode).toBe(200)
@@ -199,6 +223,8 @@ describe('AWS Lambda Adapter for Hono', () => {
 
   it('Should handle a GET request and return a 404 response', async () => {
     const event = {
+      version: '1.0',
+      resource: '/nothing',
       httpMethod: 'GET',
       headers: { 'content-type': 'text/plain' },
       path: '/nothing',
@@ -215,6 +241,8 @@ describe('AWS Lambda Adapter for Hono', () => {
     const searchParam = new URLSearchParams()
     searchParam.append('message', 'Good Morning Lambda!')
     const event = {
+      version: '1.0',
+      resource: '/post',
       httpMethod: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -234,6 +262,8 @@ describe('AWS Lambda Adapter for Hono', () => {
     const searchParam = new URLSearchParams()
     searchParam.append('message', 'Good Morning Lambda!')
     const event = {
+      version: '2.0',
+      routeKey: '$default',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
@@ -241,10 +271,10 @@ describe('AWS Lambda Adapter for Hono', () => {
       rawQueryString: '',
       body: Buffer.from(searchParam.toString()).toString('base64'),
       isBase64Encoded: true,
-      requestContext: testLambdaFunctionUrlRequestContext,
+      requestContext: testApiGatewayRequestContextV2,
     }
 
-    testLambdaFunctionUrlRequestContext.http.method = 'POST'
+    testApiGatewayRequestContextV2.http.method = 'POST'
 
     const response = await handler(event)
     expect(response.statusCode).toBe(200)
@@ -255,6 +285,8 @@ describe('AWS Lambda Adapter for Hono', () => {
     const array = new Uint8Array([0xc0, 0xff, 0xee])
     const buffer = Buffer.from(array)
     const event = {
+      version: '1.0',
+      resource: '/post/binary',
       httpMethod: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -272,6 +304,8 @@ describe('AWS Lambda Adapter for Hono', () => {
 
   it('Should handle a request and return a 401 response with Basic auth', async () => {
     const event = {
+      version: '1.0',
+      resource: '/auth/abc',
       httpMethod: 'GET',
       headers: {
         'Content-Type': 'plain/text',
@@ -289,6 +323,8 @@ describe('AWS Lambda Adapter for Hono', () => {
   it('Should handle a request and return a 200 response with Basic auth', async () => {
     const credential = 'aG9uby11c2VyLWE6aG9uby1wYXNzd29yZC1h'
     const event = {
+      version: '1.0',
+      resource: '/auth/abc',
       httpMethod: 'GET',
       headers: {
         'Content-Type': 'plain/text',
@@ -307,6 +343,8 @@ describe('AWS Lambda Adapter for Hono', () => {
 
   it('Should handle a GET request and return custom context', async () => {
     const event = {
+      version: '1.0',
+      resource: '/custom-context/apigw',
       httpMethod: 'GET',
       headers: { 'content-type': 'application/json' },
       path: '/custom-context/apigw',
@@ -322,6 +360,8 @@ describe('AWS Lambda Adapter for Hono', () => {
 
   it('Should handle a GET request and context', async () => {
     const event = {
+      version: '1.0',
+      resource: '/lambda-context',
       httpMethod: 'GET',
       headers: { 'content-type': 'application/json' },
       path: '/lambda-context',
@@ -349,6 +389,8 @@ describe('AWS Lambda Adapter for Hono', () => {
 
   it('Shoul handle a POST request and return a 200 response with cookies set (APIGatewayProxyEvent V1 and V2)', async () => {
     const apiGatewayEvent = {
+      version: '1.0',
+      resource: '/cookie',
       httpMethod: 'POST',
       headers: { 'content-type': 'text/plain' },
       path: '/cookie',
@@ -366,13 +408,15 @@ describe('AWS Lambda Adapter for Hono', () => {
     ])
 
     const apiGatewayEventV2 = {
+      version: '2.0',
+      routeKey: '$default',
       httpMethod: 'POST',
       headers: { 'content-type': 'text/plain' },
       rawPath: '/cookie',
       rawQueryString: '',
       body: null,
       isBase64Encoded: false,
-      requestContext: testApiGatewayRequestContext,
+      requestContext: testApiGatewayRequestContextV2,
     }
 
     const apiGatewayResponseV2 = await handler(apiGatewayEventV2)
@@ -386,6 +430,8 @@ describe('AWS Lambda Adapter for Hono', () => {
 
   it('Shoul handle a POST request and return a 200 response if cookies match (APIGatewayProxyEvent V1 and V2)', async () => {
     const apiGatewayEvent = {
+      version: '1.0',
+      resource: '/cookie',
       httpMethod: 'GET',
       headers: {
         'content-type': 'text/plain',
@@ -405,6 +451,8 @@ describe('AWS Lambda Adapter for Hono', () => {
     expect(apiGatewayResponse.isBase64Encoded).toBe(false)
 
     const apiGatewayEventV2 = {
+      version: '2.0',
+      routeKey: '$default',
       httpMethod: 'GET',
       headers: { 'content-type': 'text/plain' },
       rawPath: '/cookie',
@@ -412,7 +460,7 @@ describe('AWS Lambda Adapter for Hono', () => {
       rawQueryString: '',
       body: null,
       isBase64Encoded: false,
-      requestContext: testApiGatewayRequestContext,
+      requestContext: testApiGatewayRequestContextV2,
     }
 
     const apiGatewayResponseV2 = await handler(apiGatewayEventV2)
