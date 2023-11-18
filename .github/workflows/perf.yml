@@ -1,12 +1,11 @@
 name: Hono Performance Test
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      framework:
+        description: 'Framework to test'
+        required: true
 
 jobs:
   performance-test:
