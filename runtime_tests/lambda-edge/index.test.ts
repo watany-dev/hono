@@ -1,11 +1,11 @@
 /* eslint-disable quotes */
+import { handle } from '../../src/adapter/lambda-edge/handler'
 import type {
   Callback,
   CloudFrontConfig,
   CloudFrontRequest,
   CloudFrontResponse,
-} from '../../src/adapter/lambda-edge/handler'
-import { handle } from '../../src/adapter/lambda-edge/handler'
+} from '../../src/adapter/lambda-edge/types'
 import { Hono } from '../../src/hono'
 import { basicAuth } from '../../src/middleware/basic-auth'
 
