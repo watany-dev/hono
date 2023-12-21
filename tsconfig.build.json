@@ -14,7 +14,10 @@
   "exclude": [
     "src/mod.ts",
     "src/middleware.ts",
+    "src/helper.ts",
     "src/deno/**/*.ts",
-    "src/**/*.test.ts"
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/test-utils/*.ts"
   ]
-}
+} 
