@@ -1,18 +1,18 @@
+import { jsxRenderer, useRequestContext } from 'hono/jsx-renderer'
 import { describe, it, expect } from 'vitest'
 import { Hono } from '../../hono'
-import { toSsg } from './index'
-import { jsxRenderer, useRequestContext } from 'hono/jsx-renderer'
 import { jsx } from '../../jsx'
+import { ssgRoute, toSsg } from './index'
 
 describe('toSsg function', () => {
   it('Should correctly generate static HTML files for Hono routes', async () => {
     const app = new Hono()
-    app.get('/', (c) => c.text('Hello, World!'))
-    app.get('/about', (c) => c.text('About Page'))
-    app.get('/about/some', (c) => c.text('About Page 2tier'))
-    app.post('/about/some/thing', (c) => c.text('About Page 3tier'))
-    app.get('/bravo', (c) => c.html('Bravo Page'))
-    app.get('/Charlie', async (c, next) => {
+    app.get('/', ssgRoute(), (c) => c.text('Hello, World!'))
+    app.get('/about', ssgRoute(), (c) => c.text('About Page'))
+    app.get('/about/some', ssgRoute(), (c) => c.text('About Page 2tier'))
+    app.post('/about/some/thing', ssgRoute(), (c) => c.text('About Page 3tier'))
+    app.get('/bravo', ssgRoute(), (c) => c.html('Bravo Page'))
+    app.get('/Charlie', ssgRoute(), async (c, next) => {
       c.setRenderer((content, head) => {
         return c.html(
           <html>
@@ -27,9 +27,18 @@ describe('toSsg function', () => {
       })
       await next()
     })
-    app.get('/Charlie', (c) => {
+    app.get('/Charlie', ssgRoute(), (c) => {
       return c.render('Hello!', { title: 'Charlies Page' })
     })
+    app.get('/posts/:id', ssgRoute(() => {
+      const result = []
+      for (let i = 0; i !== 10; i ++) {
+        result.push({
+          id: i.toString()
+        })
+      }
+      return result
+    }), c => c.text(`Post ${c.req.param('id')}`))
 
     const fsMock = {
       writeFile: vitest.fn((path, data) => {

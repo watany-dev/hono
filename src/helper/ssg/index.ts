@@ -1,7 +1,9 @@
 import * as path from 'path'
+import type { Env, Schema } from '../..'
+import { replaceUrlParam } from '../../client/utils'
 import { inspectRoutes } from '../../helper/dev'
 import type { Hono } from '../../hono'
-import type { Env, Schema } from '../../types'
+import { createMiddleware } from '../factory'
 
 interface FileSystemModule {
   writeFile(path: string, data: string | Buffer): Promise<void>
@@ -12,6 +14,21 @@ const generateFilePath = (routePath: string) => {
   const fileName = routePath === '/' ? 'index.html' : routePath + '.html'
   return path.join('./static', fileName)
 }
+
+export type GeneratedStaticPaths = Record<string, string>[]
+export type GenerateStaticPaths = () => GeneratedStaticPaths | Promise<GeneratedStaticPaths>
+
+/**
+ * For define SSG route
+ */
+export const ssgRoute = (generateStaticPaths?: GenerateStaticPaths) => createMiddleware(async (c, next) => {
+  if (!generateStaticPaths) {
+    generateStaticPaths = () => [{}]
+  }
+  const staticPaths = await generateStaticPaths()
+  c.header('x-hono-ssg', JSON.stringify(staticPaths))
+  await next()
+})
 
 export const toSsg = async <
   E extends Env = Env,
@@ -28,15 +45,23 @@ export const toSsg = async <
 
     const url = new URL(route.path, baseURL).toString()
     const response = await app.fetch(new Request(url))
-    const html = await response.text()
+    const forHonoSsgHeaderData = response.headers.get('x-hono-ssg')
+    if (!forHonoSsgHeaderData) {
+      continue
+    }
+    const staticPaths: Record<string, string>[] = JSON.parse(forHonoSsgHeaderData)
+    for (const staticPath of staticPaths) {
+      const replacedUrl = replaceUrlParam(route.path, staticPath)
+      const pageRes = await app.request(new URL(replacedUrl, baseURL).href)
+      const html = await pageRes.text()
 
-    const filePath = generateFilePath(route.path)
-    const dirPath = path.dirname(filePath)
+      const filePath = generateFilePath(replacedUrl)
+      const dirPath = path.dirname(filePath)
+      await fsModule.mkdir(dirPath, { recursive: true })
+      await fsModule.writeFile(filePath, html)
+      console.log(`File written: ${filePath}`)
 
-    await fsModule.mkdir(dirPath, { recursive: true })
-    await fsModule.writeFile(filePath, html)
-    console.log(`File written: ${filePath}`)
+    }
   }
-
   console.log('Static site generation completed.')
 }
