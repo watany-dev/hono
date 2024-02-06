@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { Hono } from '../../hono'
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { jsx } from '../../jsx'
+import { renderToReadableStream, Suspense } from '../../jsx/streaming'
 import { poweredBy } from '../../middleware/powered-by'
 import {
   fetchRoutesContent,
@@ -47,6 +48,28 @@ describe('toSSG function', () => {
     })
     app.get('/Charlie', (c) => {
       return c.render('Hello!', { title: 'Charlies Page' })
+    })
+
+    async function DeltaComponent() {
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+      return <div>Hello</div>
+    }
+    app.get('/delta', (c) => {
+      const stream = renderToReadableStream(
+        <html>
+          <body>
+            <Suspense fallback={<div>loading...</div>}>
+              <DeltaComponent />
+            </Suspense>
+          </body>
+        </html>
+      )
+      return c.body(stream, {
+        headers: {
+          'Content-Type': 'text/html; charset=UTF-8',
+          'Transfer-Encoding': 'chunked',
+        },
+      })
     })
 
     // Included params
@@ -169,7 +192,7 @@ describe('toSSG function', () => {
       return false
     }
     const result = await toSSG(app, fsMock, { beforeRequestHook })
-    expect(result.files).toHaveLength(11)
+    expect(result.files).toHaveLength(12)
   })
 
   it('should skip the route if the request hook returns false', async () => {
@@ -190,7 +213,7 @@ describe('toSSG function', () => {
       mkdir: vi.fn(() => Promise.resolve()),
     }
     const result = await toSSG(app, fsMock, { afterResponseHook })
-    expect(result.files).toHaveLength(10)
+    expect(result.files).toHaveLength(11)
   })
 
   it('should skip the route if the response hook returns false', async () => {
@@ -214,6 +237,13 @@ describe('toSSG function', () => {
 
     expect(afterGenerateHookMock).toHaveBeenCalled()
     expect(afterGenerateHookMock).toHaveBeenCalledWith(expect.anything())
+  })
+
+  it('should apply request hooks in SSG process', async () => {
+    const htmlMap = await fetchRoutesContent(app)
+    const deltaHtml = htmlMap.get('/delta')
+    expect(deltaHtml?.content).toContain('loading...')
+    expect(deltaHtml?.content).toContain('<div>Hello</div>')
   })
 })
 
